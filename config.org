@@ -5,26 +5,68 @@
 #+SUBTITLE: Literate and declarative programming (at least for Emacs configuration)
 #+STARTUP: indent fold overview
 
-This is the GNU/Emacs configuration file. It sets up Emacs in a less bloated way than /Spacemacs/ or /Doom/, and it is more "modern" than the bbatsov's /prelude/.
+This is the ~GNU Emacs~ "literate" configuration file. It sets up Emacs in a less bloated way than /Spacemacs/ or /Doom/, and it is more "modern" than the /bbatsov's /prelude/.
 
-It is already full of /bloat/ and it's time to purge it.
+It is already full of /bloat/ and it's time to purge it (even before it is completed).
 
-The main principle behind the "literate programming" meme is that one writes everything down right next to the code -- all the justification, explanations and even /links/ to the relevant pages.
+* The underlying principles
+The main principle behind the "literate programming" meme is that one writes everything down /right next to the code/ -- all the rationale, justifications, explanations and even /links/ to the relevant web pages.
 
-/For humans to understand/ first, and then for a machine to interpret.
+/For humans to understand/, and then (and only then) for a machine to interpret.
 
-This implies that there should be, at lest in a theory, more text than code.
+This implies that there should be, at lest in a theory, more text than code. Some grafomans write a lot of text, but this is an /anti-virtue/. Ideally, we have to mimic the short and concise writing style of Richard Bird and  Graham Hutton.
 
-"Lazy loading" is a mess. Just do normal /waterfall/ (top-to-bottom) imperative crap.
-So themes and ~which-key~ must come /last/, after everything has been loaded.
+** Why not Doom Emacs?
+Well, it is plagued by /over-abstraction (abstraction for the sake of abstraction)/ and already too convoluted, at least for my taste.
 
-Using /hooks/ and /modes/ is the principled way. Key bindings could also be done via the ~:bind~ clause.
+It seems that the embedded declarative DSL of ~use-package~, which finally has been included  within GNU Emacs, is a "just right spot" (for various reasons).
 
-- I use declarative embedded DSLs (sets of macros) -- ~use-package~
-- I delegate tedious tasks to module maintainers -- ~straight.el~
-- I look how ~Spacemacs~ and ~Doom~ did it.
+The fundamental principle is that it keeps everything at the right level of /stable high-level interfaces/, at least in theory, when used well and not being abused.
+
+Also we absolutely do not want any goddamn bloody /vim keys/ in our Emacsen.
+It messes everything up and creates an illusion of rather unnecessary and unwarranted cleverness. The classic Emacs key bindings is the /right way/.
+* The trick
+/The trick, William Potter, is not minding that it hurts/.
+
+The universal principles will work here even better, and will appear even more obvious. The trick is not to /over-configure/ by breaking /abstraction barriers/ and tweaking the internals, which will change at a whip day after tomorrow, and use only the stable public interfaces.
+
+Applying this principle will give you way better chances to survive frequent package upgrades. This is why the /declarative embedded DSLs are the best options/ -- we are staying at the level of high-level interfaces.
+
+So we just carefully use the "standard" declarative DSL and applying all the classic  principles of /proper abstraction/ from the golden age of programming (70s and 80s) .
+
+** Techniques
+"Lazy loading" is a mess. It is not just /imperative with destructive updates/ it is also "non-local", which means we cannot see the "whole picture" while reading the code, and have to /simulate the process within our minds/.
+
+Just do normal /waterfall/ (top-to-bottom) imperative crap.
+
+There are 3 common techniques which emerge again and again in other people's configs:
+- ~:hooks~ which configure the "modes"
+- ~:after~ and a "mode" in the ~:config~ section
+- ~:commands~ which wait to be called
+
+**  :straights and :defers
+We use the ~:defer t~ /by default/ and an implicit  ~:straight t~ for an obvious reason -- the common case must be a default (an implicit) one
+
+#+begin_src elisp :tangle no
+(setq straight-use-package-by-default t)
+(setq use-package-always-defer t)
+
+(straight-use-package '(use-package :type built-in))
+#+end_src
+
+so default to ~:defer t~, use ~:demand~ to force loading.
+
+Use ~:straight (:type built-in)~ for what comes with Emacs (nonably, ~use-package~ itself).
+** :binds
+The key-bindings declarative micro-DSL, which even supports ~remaps~  is where it begins to really shine.
+
+Using /hooks/ for activating /modes/ is the principled way. Key bindings could also be done via the ~:bind~ clause.
+* The mantras
+- I use /declarative/ embedded DSLs (sets of macros) -- ~use-package~
+- I /delegate/ tedious tasks to module maintainers -- ~straight.el~
+- I look how ~Spacemacs~ and ~Doom~ did it
 - I learn by understanding other people's configs, like /tecosaur/ or /purcel/
-
+** cheat scheet
 Essential ~use-package~ cheat sheet.
 - Do not set ~use-package-always-defer~ to ~t~
 - ~:defer~ means do not load /right now/, only create the /autoloads/.
@@ -36,7 +78,11 @@ Essential ~use-package~ cheat sheet.
 - ~:hook~ keyword allows adding functions onto package /hooks/  
 - ~:after~ and ~:defer~ thus are orthogonal and could be used together
   
-#+TODO: ox-publish, exports, latex, pandoc
+* TODO
+We are going right through the LSP revolution, so everything has to be converted to the modern high quality tools.
+
+The things like ~semantic~, ~irony~ or ~rtags~ are very cool indeed, but modern highly sophisticated LSP servers do it better and much more efficiently.
+
 ~(setq lsp-clients-clangd-args '("-j=4" "--background-index" "--clang-tidy" "--completion-style=detailed" "-log=error"))~
 
 * The first lines
@@ -45,7 +91,6 @@ Essential ~use-package~ cheat sheet.
 
   (setq-default load-prefer-newer t)
 
-  (setq package-enable-at-startup nil)
   ;; a hack
   (add-function :after after-focus-change-function
                 (defun garbage-collect-maybe ()
@@ -1686,6 +1731,62 @@ For all /prog-modes/
       :straight t
       :after company)
 #+END_SRC
+* dired
+#+begin_src emacs-lisp :tangle yes
+(use-package dired
+  :hook (dired-mode . dired-hide-details-mode)
+  :config
+  (setq dired-dwim-target t
+        dired-hide-details-hide-symlink-targets nil
+        dired-auto-revert-buffer #'dired-buffer-stale-p
+        dired-recursive-copies  'always
+        dired-recursive-deletes 'top
+        dired-create-destination-dirs 'ask))
+
+(use-package dired-async
+  :config
+  :hook (dired-mode . dired-async-mode))
+
+(use-package dired-x
+  :hook (dired-mode . dired-omit-mode)
+  :commands (dired-jump
+             dired-jump-other-window
+             dired-omit-mode)
+  :config
+  (setq dired-omit-verbose nil
+        dired-omit-files
+        (concat dired-omit-files
+                "\\|^\\.DS_Store\\'"
+                "\\|^\\.project\\(?:ile\\)?\\'"
+                "\\|^\\.\\(?:svn\\|git\\)\\'"
+                "\\|^\\.ccls-cache\\'"
+                "\\|\\(?:\\.js\\)?\\.meta\\'"
+                "\\|\\.\\(?:elc\\|o\\|pyo\\|swp\\|class\\)\\'"))
+  )
+
+(use-package dired-aux
+  :defer t
+  :config
+  (setq dired-create-destination-dirs 'ask
+        dired-vc-rename-file t))
+
+(use-package fd-dired
+  :straight t
+  :defer t
+  :init
+  (global-set-key [remap find-dired] #'fd-dired))
+
+(use-package diredfl
+  :straight t
+  :hook (dired-mode . diredfl-mode))
+
+(use-package dired-git-info
+  :straight t
+  :hook (dired-mode . (lambda ()
+                        (dired-git-info-mode t))))
+
+(define-key dired-mode-map (kbd "C-x C-k") 'dired-do-delete)
+#+end_src
 * eshell
 When /not in a rush/, this is a /principle-guided/ way.
 
@@ -2087,24 +2188,24 @@ For all buffers
                 map)
       ))
 
-    (use-package vundo
-      :straight t
-      :commands (vundo)
-      :config
-      (setq vundo-glyph-alist vundo-unicode-symbols
-            vundo-compact-display t))
+  (use-package vundo
+    :straight t
+    :commands (vundo)
+    :config
+    (setq vundo-glyph-alist vundo-unicode-symbols
+          vundo-compact-display t))
 
-    (use-package undo-tree
-      :straight t
-      :custom
-      (undo-tree-history-directory-alist `(("." . ,(concat user-emacs-directory "undo-tree-hist/"))))
-      (undo-tree-visualizer-diff t)
-      :config
-      (setq undo-tree-visualizer-timestamps t)
-      (setq undo-tree-visualizer-diff t
-            undo-tree-auto-save-history t
-            undo-tree-enable-undo-in-region t)
-      (global-undo-tree-mode t))
+  (use-package undo-tree
+    :straight t
+    :custom
+    (undo-tree-history-directory-alist `(("." . ,(concat user-emacs-directory "undo-tree-hist/"))))
+    (undo-tree-visualizer-diff t)
+    :config
+    (setq undo-tree-visualizer-timestamps t)
+    (setq undo-tree-visualizer-diff t
+          undo-tree-auto-save-history t
+          undo-tree-enable-undo-in-region t)
+    (global-undo-tree-mode t))
 #+END_SRC
 * GNU Plot
 #+begin_src emacs-lisp :tangle yes
@@ -2230,7 +2331,6 @@ The obsolete solution, use ~prettify-symbols-mode~
 #+BEGIN_SRC emacs-lisp
   (use-package auto-highlight-symbol
   :straight t
-  :defer t
   :commands (ahs-highlight-p)
   :hook (prog-mode . auto-highlight-symbol-mode)
   :config
@@ -2247,7 +2347,7 @@ The obsolete solution, use ~prettify-symbols-mode~
 #+END_SRC
 ** Highlight indentation
 TODO: change the colors from the theme
-#+BEGIN_SRC emacs-lisp
+#+BEGIN_SRC emacs-lisp :tangle no
   (use-package highlight-indentation
     :straight '(highlight-indentation :host github :repo "antonj/Highlight-Indentation-for-Emacs")
     :config
@@ -2258,10 +2358,12 @@ TODO: change the colors from the theme
 #+END_SRC
 ** highligh-indent-guides
 #+BEGIN_SRC emacs-lisp
-  (use-package highlight-indent-guides
-    :straight t
-    :defer t
-    :hook (prog-mode . highlight-indent-guides-mode))
+  (use-package  highlight-indent-guides
+  :straight t
+  :diminish
+  :hook ((prog-mode text-mode conf-mode) . highlight-indent-guides-mode)
+  :hook (after-init . highlight-indent-guides-auto-set-faces)
+  :init (setq highlight-indent-guides-method 'character))
 #+END_SRC
 ** newline-and-indent
 #+BEGIN_SRC emacs-lisp
@@ -2715,15 +2817,15 @@ Formatters
       (setq py-docformatter-options '("--wrap-summaries=72" "--pre-summary-newline")))
 #+end_src
 #+begin_src emacs-lisp :tangle yes
-  (use-package blacken
-      :straight t
-      :hook (python-mode . blacken-mode)
-      :config
-      (setq blacken-line-length '72))
+    (use-package blacken
+        :straight t
+        :hook (python-mode . blacken-mode)
+        :config
+        (setq blacken-line-length '72))
 
-  (use-package python-docstring
-      :straight t
-      :hook (python-mode . python-docstring-mode))
+    (use-package python-docstring
+        :straight t
+        :hook (python-mode . python-docstring-mode))
 #+end_src
 We use ~flyckeck~
 #+BEGIN_SRC emacs-lisp
@@ -3018,11 +3120,17 @@ We "cascade" themes with hope that they will "add up"
 #+BEGIN_SRC emacs-lisp
   (use-package doom-themes
     :straight t
+    :hook (after-init . (lambda ()
+                        (load-theme 'doom-nord t)))
+    :hook (org-mode . (lambda ()
+                      (require 'doom-themes-ext-org)
+                      (doom-themes-org-config)))
+    :init
+    (setq doom-themes-enable-bold t    ; if nil, bold is universally disabled
+                doom-themes-enable-italic t) ; if nil, italics is universally
+                                        ; disabled
     :config
-    (setq doom-themes-enable-bold t
-              doom-themes-enable-italic t)
-    (load-theme 'doom-nord t)
-    (doom-themes-org-config))
+    (load-theme 'doom-nord t))
 #+END_SRC
 ** Tokyo Night
 #+begin_src emacs-lisp :tangle yes
