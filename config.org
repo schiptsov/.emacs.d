@@ -99,12 +99,17 @@ The things like ~semantic~, ~irony~ or ~rtags~ are very cool indeed, but modern 
   ;; or just (add-hook 'focus-out-hook #'garbage-collect)
 #+END_SRC
 * local.el
+This is for private information, so it can be easily /excluded from any repos/
+
 #+BEGIN_SRC emacs-lisp
 (let ((local-file (expand-file-name "local.el" user-emacs-directory))) 
 (when (file-exists-p local-file) (load local-file 'noerror)))
 #+END_SRC
 * Encoding (again)
 Nasty hacks, but we have to be /consistent/ with the /external processes/.
+
+Seems like unnecessary, since we have set everything up in [[file:init.el][init.el]]
+
 #+BEGIN_SRC emacs-lisp
   (setenv "LC_CTYPE" "UTF-8")
   (setenv "LC_ALL" "en_US.UTF-8")
@@ -125,26 +130,91 @@ Nasty hacks, but we have to be /consistent/ with the /external processes/.
 * straight + use-package
 Using the one which comes with Emacs. Maybe not such a good idea. New versions might have bug fixes.
 
-We use these macros (declarative DSLs) as much as possible. 
+We use these macros (declarative DSLs) as much as possible.
+
 #+BEGIN_SRC emacs-lisp
-  (straight-use-package 'diminish)
   (straight-use-package '(bind-key :type built-in))
   (straight-use-package '(use-package :type built-in))
 #+END_SRC
 * auto-compile (for a /elisp code/ on loading)
-This works for Emacs Lisp within, and, perhaps, other modes.
+This works only for Emacs Lisp within. This is a /byte-compile/, not /native code/.
+
 #+BEGIN_SRC emacs-lisp
 (use-package auto-compile
   :straight t
   :defer nil
   :config (auto-compile-on-load-mode))
 #+END_SRC
-* async
+* async and dired
+~dired~ is a "fundamental" mode, so lets have it early on
+
 #+begin_src emacs-lisp
 (use-package async
-  :straight t
+  :config (dired-async-mode t))
+
+(use-package dired-async
+  :straight '(:type built-in)
+  :config
+  :hook (dired-mode-load . dired-async-mode))
+
+;; https://github.com/Fuco1/dired-hacks
+(use-package dired
+  :straight '(:type built-in)
+  :hook (dired-mode . dired-hide-details-mode)
+  :bind ("C-x C-k" . 'dired-do-delete)
+  :config
+  (setq dired-dwim-target t
+        dired-hide-details-hide-symlink-targets nil
+        dired-auto-revert-buffer #'dired-buffer-stale-p
+        dired-recursive-copies  'always
+        dired-recursive-deletes 'top
+        dired-create-destination-dirs 'ask))
+
+(use-package dired-aux
+  :straight '(:type built-in)
+  :config
+  (require 'dired-async)
+  (setq dired-create-destination-dirs 'ask
+        dired-vc-rename-file t))
+
+(use-package dired-x
+  :straight '(:type built-in)
+  :hook (dired-mode . dired-omit-mode)
+  :commands (dired-jump
+             dired-jump-other-window
+             dired-omit-mode)
+  :config
+  (setq dired-omit-verbose nil
+        dired-omit-files
+        (concat dired-omit-files
+                "\\|^\\.DS_Store\\'"
+                "\\|^\\.project\\(?:ile\\)?\\'"
+                "\\|^\\.\\(?:svn\\|git\\)\\'"
+                "\\|^\\.ccls-cache\\'"
+                "\\|\\(?:\\.js\\)?\\.meta\\'"
+                "\\|\\.\\(?:elc\\|o\\|pyo\\|swp\\|class\\)\\'"
+                "^\\.[^.]\\|$Rhistory\\|$RData\\|__pycache__"))
+  )
+
+(use-package dired-hide-dotfiles
+  :hook (dired-mode . dired-hide-dotfiles-mode))
+
+(use-package dired-gitignore
+  :straight '(:type git :host github :repo "johannes-mueller/dired-gitignore.el")
+  :hook (dired-mode . dired-gitignore-mode))
+
+(use-package fd-dired
   :init
-  (dired-async-mode 1))
+  (global-set-key [remap find-dired] #'fd-dired))
+
+(use-package diredfl
+  :hook (dired-mode . diredfl-mode))
+
+(use-package dired-git-info
+  :hook (dired-mode . (lambda ()
+                        (dired-git-info-mode t))))
+
+
 #+end_src
 * Set-face hack
 #+BEGIN_SRC emacs-lisp
@@ -167,7 +237,6 @@ This works for Emacs Lisp within, and, perhaps, other modes.
 * Fonts & Faces
 #+BEGIN_SRC emacs-lisp
 (use-package font-lock+
-  :straight t
   :load-path "lisp")
 
 (font-lock-add-keywords nil '(("\t" . 'extra-whitespace-face)))
@@ -294,8 +363,11 @@ For ease of use, let's also set up an easy way of setting the ~:font~ attribute.
 (global-set-key (kbd "RET") 'newline-and-indent)
 #+END_SRC
 * Ctrl-y
+These are default, will be overriden by ~counsel~
+
 #+begin_src emacs-lisp :tangle yes
      (global-set-key (kbd "C-y") 'yank)
+     (global-set-key (kbd "M-y") 'yank-pop)
 #+end_src
 * backward-delete-word
 #+begin_src emacs-lisp :tangle yes
@@ -316,6 +388,8 @@ With argument, do this that many times."
 (global-set-key (read-kbd-macro "<M-DEL>") 'backward-delete-word)
 #+end_src
 * Better defaults
+Probably should put these into a ~use-package~ block, but seems like unnecessary nesting for an ~org-mode~ code block.
+
 #+BEGIN_SRC emacs-lisp
 (setq inhibit-startup-screen t)
 (setq initial-scratch-message "")
@@ -333,9 +407,15 @@ With argument, do this that many times."
 
 (setq-default truncate-lines nil)
 
+;; lets be explicit and re-enable everythig important
 (add-hook 'prog-mode-hook (lambda ()
     		            (setq show-trailing-whitespace t)
-    		            (setq indicate-empty-lines t)))
+    		            (setq indicate-empty-lines t)
+
+                    (setq tab-width 4)
+                    (setq fill-column 72)
+                    (set-fill-column 72)
+                    (auto-fill-mode t)))
 
 (setq-default tab-width 4)
 (setq-default fill-column 72)
@@ -372,12 +452,11 @@ The modes that bundled with Emacs
   (setq whitespace-style '(face spaces tabs newline space-mark tab-mark))
   (global-whitespace-mode t)
 
+  ;; this is a nice subtle hack
   (add-hook 'diff-mode-hook 'whitespace-mode)
 
 (use-package whitespace-cleanup-mode
-  :straight t
-  :config
-  (whitespace-cleanup-mode t))
+  :config (whitespace-cleanup-mode t))
 #+END_SRC
 * ligatures
 This suggests and primes the underlying mathematics by using relevant math notation.
@@ -564,9 +643,7 @@ Just use the built-in mode
   (setq select-enable-primary t)
 
   (use-package xclip
-    :straight t
-    :config
-    (xclip-mode t))
+    :config (xclip-mode t))
 #+END_SRC
 * Never lose your work again
 Never lose your writing again.
@@ -592,49 +669,47 @@ Requires a modern Emacs.
 * super-save
 #+begin_src emacs-lisp :tangle yes
   (use-package super-save
-    :straight t
-    :config
-    (super-save-mode +1))
+    :config (super-save-mode +1))
 #+end_src
 * recentf
 #+begin_src emacs-lisp
 (use-package recentf
+  :straight (:type built-in)
   :custom
   (recentf-save-file "~/.emacs.d/recentf")
   (recentf-show-file-shortcuts-flag t)
-  :config
-  (recentf-mode t))
+  :config (recentf-mode t))
 #+end_src
 * savehist
 #+BEGIN_SRC emacs-lisp
   (use-package savehist
+    :straight (:type built-in)
     :config
-   (setq history-length t)
-   (setq history-delete-duplicates t)
-   (setq savehist-save-minibuffer-history 1)
-   (setq savehist-additional-variables
-      '(kill-ring
-        search-ring
-        regexp-search-ring))
-    (savehist-mode t))
+        (setq history-length t)
+        (setq history-delete-duplicates t)
+        (setq savehist-save-minibuffer-history 1)
+        (setq savehist-additional-variables
+              '(kill-ring
+                search-ring
+                regexp-search-ring))
+        (savehist-mode t))
 #+END_SRC
 * saveplace
 #+begin_src emacs-lisp
 (use-package saveplace
+  :straight (:type built-in)
   :custom
   (save-place-file "~/.emacs.d/saveplace")
-  :config
-  (save-place-mode t))
+  :config (save-place-mode t))
 #+end_src
 * autorevert
 #+begin_src emacs-lisp
 (use-package autorevert
-  :delight
+  :straight (:type built-in)
   :custom
   (auto-revert-check-vc-info t)
   (auto-revert-verbose t)
-  :config
-  (global-auto-revert-mode +1))
+  :config (global-auto-revert-mode +1))
 #+end_src
 * Socks5
 At least try to use it.
@@ -643,7 +718,7 @@ At least try to use it.
 (setq-default socks-server '("Tor" "127.0.0.1" 9050 5))
 (setq-default socks-noproxy '("127.0.0.1"))
 #+END_SRC
-* Security
+* Security and encryption (~gnupg~ and ~pass~)
 We use ~gnupg~ and the built-in support for it.
 ~pass~ is also based on ~gnupg~. Never try to come up with your own /cryptography/.
 
@@ -705,47 +780,43 @@ We use ~gnupg~ and the built-in support for it.
 (straight-use-package 'crypt++)
 #+end_src
 * Personification
+** TODO: should be moved into ~local.el~
 #+BEGIN_SRC emacs-lisp
   (setq user-full-name "Ln Gnmn"
-               user-mail-address "lngnmn2@yahoo.com")
+        user-mail-address "lngnmn2@yahoo.com")
 
   ;;  (setq epa-file-encrypt-to "B5BCA34F13278C5B")
   (setq epa-file-encrypt-to '("lngnmn2@yahoo.com"))
 #+END_SRC
-* beacon
+* beacon (flash it when I jump)
 #+begin_src emacs-lisp
 (use-package beacon
-  :straight t
   :config (beacon-mode t))
 #+end_src
 * Nyan biralo
 WARNING, MIND DUMBING CONTENT INSIDE.
 #+BEGIN_SRC emacs-lisp
   (use-package nyan-mode
-    :straight t
     :config
     (setq nyan-animate-nyancat t)
     (setq nyan-wavy-trail t)
     (nyan-mode t))
 #+END_SRC
-* Guru-mode
+* Guru-mode (enforce the good practices)
 #+BEGIN_SRC emacs-lisp
   (use-package guru-mode
-    :straight t
     :config
     (guru-global-mode t))
 #+END_SRC
-* showkey.el
+* showkey.el (for seeing how it works by yourself)
 #+BEGIN_SRC emacs-lisp
       (use-package showkey
-        :straight t
-        :defer t)
+        :command showkey-mode)
 #+END_SRC
 * iedit
 #+BEGIN_SRC emacs-lisp
   (use-package iedit
-    :straight t
-    :defer t)
+    :commands iedit)
 #+END_SRC
 * Remove the clutter
 Screen space is precious on FHD display.
@@ -768,39 +839,11 @@ The goal is to have two pages of text side-by-side.
 ~M-n~ and ~M-p~
 #+begin_src emacs-lisp
 (use-package smartscan
-  :straight t
   :config (global-smartscan-mode t))
 #+end_src
-* ido (built-in completions)
-We just have it built-in
-#+BEGIN_SRC emacs-lisp
-  (use-package flx
-      :straight t
-      :defer t)
-
-  (use-package ido
-    :defer t
-    :after flx
-    :config
-    (ido-everywhere 1))
-
-  (use-package ido-completing-read+
-    :straight t
-    :defer t
-    :after ido
-    :config
-    (ido-ubiquitous-mode 1))
-
-  (use-package flx-ido
-    :straight t
-    :defer t
-    :after ido
-    :config
-    (flx-ido-mode t))
-#+END_SRC
 * tree-sitter
 A global mode and For all /prog-modes/, uses a binary bundle of all parsers.
-** built-in treesit
+** built-in treesit (the "future")
 #+BEGIN_SRC emacs-lisp
   (use-package treesit
     :init
@@ -841,32 +884,24 @@ A global mode and For all /prog-modes/, uses a binary bundle of all parsers.
   :config
   (mp-setup-install-grammars))
 #+END_SRC
-** tree-sitter
+** tree-sitter-mode (an obsolete solution)
 #+BEGIN_SRC emacs-lisp
   (straight-use-package 'tree-sitter-langs)
   (straight-use-package 'tree-sitter-indent)
   (use-package tree-sitter
-    :straight t
-    :defer t
-    ;; :hook (prog-mode . (lambda ()
-    ;;                    (interactive)
-    ;;                    (tree-sitter-mode t)
-    ;;                    (tree-sitter-hl-mode t)
-    ;;                    (tree-sitter-indent-mode t)))
     :init
     (require 'tree-sitter-langs)
     (require 'tree-sitter-indent)
     :config
     (setq tree-sitter-debug-jump-buttons t
               tree-sitter-debug-highlight-jump-region t)
-      (add-to-list 'tree-sitter-major-mode-language-alist '(emacs-lisp-mode . elisp))
-      (add-to-list 'tree-sitter-major-mode-language-alist  '(lisp-interaction-mode . elisp)))
-    ;;    (global-tree-sitter-mode t))
+    (add-to-list 'tree-sitter-major-mode-language-alist '(emacs-lisp-mode . elisp))
+    (add-to-list 'tree-sitter-major-mode-language-alist  '(lisp-interaction-mode . elisp))
+    (global-tree-sitter-mode t))
 #+END_SRC
 * Spelling
 #+BEGIN_SRC emacs-lisp
   (use-package ispell
-    :straight t
     :config
     (add-to-list 'ispell-extra-args "-C")
     (add-to-list 'ispell-extra-args "--sug-mode=ultra")
@@ -874,7 +909,6 @@ A global mode and For all /prog-modes/, uses a binary bundle of all parsers.
     (setq ispell-skip-html t))
 
   (use-package flyspell
-    :straight t
     :hook ((text-mode . flyspell-mode)
            (prog-mode . flyspell-prog-mode))
     :config
@@ -885,34 +919,47 @@ A global mode and For all /prog-modes/, uses a binary bundle of all parsers.
     (flyspell-mode t))
 
   (use-package spell-fu
-   :straight t
    :config
    (global-spell-fu-mode t))
 
+   ;; this is an outdated solution
   (use-package flyspell-lazy
-    :straight t
-    :config
-    (flyspell-lazy-mode t))
+    :after flyspell
+    :config (flyspell-lazy-mode t))
 #+END_SRC
-* engrave-faces
-#+begin_src emacs-lisp :tangle yes
-  (use-package engrave-faces
-    :straight t)
-#+end_src
 * HTML
 #+BEGIN_SRC emacs-lisp
+  (use-package sgml-mode
+    :hook
+    ((html-mode . sgml-electric-tag-pair-mode)
+     (html-mode . sgml-name-8bit-mode))
+    :custom
+    (sgml-basic-offset 2)
+    :config
+    (setq sgml-xml-mode t)
+    (setq sgml-transformation-function 'upcase))
+
+  (use-package tidy
+      :config
+      (setq sgml-validate-command "tidy"))
+
+  (use-package tagedit
+    :hook (sgml-mode . tagedit-mode )
+    :config
+    (with-eval-after-load 'sgml-mode
+      (tagedit-add-paredit-like-keybindings)
+      (define-key tagedit-mode-map (kbd "M-?") nil)
+      (define-key tagedit-mode-map (kbd "M-s") nil)))
+
   (use-package nxml-mode
     :config
+    (fset 'xml-mode 'nxml-mode)
+    (fset 'html-mode 'nxml-mode)
     (setq nxml-child-indent 2)
     (setq nxml-attribute-indent 2)
     (setq nxml-auto-insert-xml-declaration-flag nil)
     (setq nxml-bind-meta-tab-to-complete-flag t)
     (setq nxml-slash-auto-complete-flag t))
-
-  (use-package tidy
-      :straight t
-      :config
-      (setq sgml-validate-command "tidy"))
 
   (defun tidy-html ()
     "Tidies the HTML content in the buffer using `tidy'"
@@ -932,40 +979,19 @@ A global mode and For all /prog-modes/, uses a binary bundle of all parsers.
      ;; show error buffer?
      t))
 
-  (use-package sgml-mode
-      :straight t
-      :hook
-      ((html-mode . sgml-electric-tag-pair-mode)
-      (html-mode . sgml-name-8bit-mode))
-      :custom
-      (sgml-basic-offset 2)
-      :config
-      (setq sgml-xml-mode t)
-      (setq sgml-transformation-function 'upcase))
-
-  (use-package tagedit
-  :straight t
-  :defer t
-    :hook (sgml-mode . tagedit-mode )
-  :config
-  (with-eval-after-load 'sgml-mode
-    (tagedit-add-paredit-like-keybindings)
-    (define-key tagedit-mode-map (kbd "M-?") nil)
-    (define-key tagedit-mode-map (kbd "M-s") nil)))
-
   (use-package ox-html
-    :defer t
     :after ox
     :config
     (setq org-html-coding-system 'utf-8-unix))
-
 #+END_SRC
-** HTMLize
+** htmlize
 #+BEGIN_SRC emacs-lisp
-  (use-package htmlize
-    :straight t
-    :defer t)
+  (straight-use-package 'htmlize)
 #+END_SRC
+** engrave-faces
+#+begin_src emacs-lisp :tangle yes
+  (straight-use-package 'engrave-faces)
+#+end_src
 * Org-Mode
 ** org itself
 Compile and load it early. Do not use the bundled one.
@@ -1431,7 +1457,98 @@ It's also nice to be able to use ~cdlatex~.
     :defer t
     :after org ox)
 #+END_SRC
-* Vertico (minibuffer)
+* Projectile
+Setting "root directories" for every "project" which is basically a /git repo/.
+
+The reason is to have a "per-project" defaults and overrides --  /paths/ and /configurations/. Tools like ~grep~ will start from a "project root", etc. The similar concepts are ~editorconfig~, etc.
+
+Emacs 29 has its own per-project settings and  modes.
+#+begin_src emacs-lisp :tangle yes
+  (use-package projectile
+    :demand
+    :hook (after-init . projectile-mode)
+    :init
+    (setq projectile-require-project-root t)
+    (setq projectile-indexing-method 'alien)
+    (setq projectile-completion-system 'ivy)
+    (setq-default projectile-generic-command "rg --files --hidden -0")
+    :config
+    (define-key projectile-mode-map (kbd "C-c p") 'projectile-command-map))
+#+end_src
+* Completion micro-frameworks
+We want to use /both/ ~counsel~ and ~consult~, because of extensions.
+Has to double-check the /clashing key bindings/.
+
+We will use ~vertico~ and ~marginalia~ because they /do not overwrite/.
+
+~ivy~ and ~ivy-rich~ will be used as a "fallback" with all the nice packages.
+
+** Emacs 29's built-in completions
+~ido~ relies on these settings.
+
+completion format can be set to ~'one-column~ just like ~ido~
+#+begin_src emacs-lisp
+(setq completions-format 'vertical)
+(setq completion-styles '(flex basic partial-completion emacs22))
+
+(unless (version< emacs-version "29.0")
+  (setq completion-auto-help 'visible
+        completion-auto-select 'second-tab
+        completion-show-help t
+        completions-sort nil ; this is a function
+        completions-header-format nil)) ; this is a string
+#+end_src
+** Smex (disabled)
+#+BEGIN_SRC emacs-lisp :tangle no
+(use-package smex
+  :straight t
+  :config
+  (smex-initialize))
+
+(use-package amx
+  :straight t
+  :after smex)
+#+END_SRC
+** Avy
+#+BEGIN_SRC emacs-lisp
+(use-package avy
+  :straight t
+  :bind (("C-:" . avy-goto-char)
+         ("M-g 2" . avy-goto-char-2))
+  :config
+  (global-set-key (kbd "C-c C-j") 'avy-resume))
+#+END_SRC
+** ido (built-in completions)
+We just have it built-in
+#+BEGIN_SRC emacs-lisp
+  (straight-use-package 'flx)
+
+  (use-package ido
+    :straight (:type built-in)
+    :config (ido-everywhere 1))
+
+  (use-package flx-ido
+    :after ido
+    :config (flx-ido-mode t))
+
+  (use-package ido-completing-read+
+    :after ido
+    :config (ido-ubiquitous-mode 1))
+#+END_SRC
+** orderless (completion style).
+#+begin_src emacs-lisp
+(use-package orderless
+  :config
+  (add-to-list 'completion-styles 'orderless)
+  (setq orderless-component-separator "[ &]")
+  :custom
+  (completion-category-overrides '((file (styles basic partial-completion)))))
+#+end_src
+** Vertico (minibuffer)
+#+begin_quote
+Vertico provides a performant and minimalistic vertical completion UI based on the default completion system. The focus of Vertico is to provide a UI which behaves correctly under all circumstances. By reusing the built-in facilities system, Vertico achieves full compatibility with built-in Emacs completion commands and completion tables.
+#+end_quote
+This is the right way - reusing and non-breaking extending.
 #+begin_src emacs-lisp :tangle yes
   (use-package vertico
     ;; Special recipe to load extensions conveniently
@@ -1452,85 +1569,57 @@ It's also nice to be able to use ~cdlatex~.
     ( "<tab>" . vertico-insert)    ; Choose selected candidate
      ("<escape>" . minibuffer-keyboard-quit) ; Close minibuffer
      ("?" . minibuffer-completion-help)
-     ;; NOTE 2022-02-05: Cycle through candidate groups
      ("C-M-n" . vertico-next-group)
      ("C-M-p" . vertico-previous-group))
     :custom
-    (vertico-count 13)                    ; Number of candidates to display
+    (vertico-count 17)                    ; Number of candidates to display
     (vertico-resize t)
-    (vertico-cycle nil) ; Go from last to first candidate and first to last (cycle)?
+    (vertico-cycle nil)
     :config
     (vertico-mode))
 #+end_src
-* Marginalia (annotations, like ~ivy-rich~)
+** Marginalia (annotations, like ~ivy-rich~)
+#+begin_quote
+ Marginalia are marks or annotations placed at the margin of the page of a book or in this case helpful colorful annotations placed at the margin of the minibuffer for your completion candidates. Marginalia can only add annotations to the completion candidates. It cannot modify the appearance of the candidates themselves, which are shown unaltered as supplied by the original command.
+#+end_quote
+So it adds annotations without modifying anything, which is the right way.
 #+begin_src emacs-lisp :tangle yes
   (use-package marginalia
-  :straight t
   :bind (:map minibuffer-local-map
   			("M-A" . marginalia-cycle))
   :init
   (marginalia-mode t))
 #+end_src
-* Ivy (completing framework with lots of modules)
-** Smex
+** Consult, etc.
 #+BEGIN_SRC emacs-lisp
-    (use-package smex
-        :straight t
-        :config
-        (smex-initialize))
+  (use-package consult
+   :straight t
+   :defer t
+   :after projectile
+   :config
+  (setq consult-project-root-function #'projectile-project-root)
+  (projectile-load-known-projects)
+  (setq my-consult-source-projectile-projects
+        `(:name "Projectile projects"
+          :narrow   ?P
+          :category project
+          :action   ,#'projectile-switch-project-by-name
+          :items    ,projectile-known-projects))
+  (add-to-list 'consult-buffer-sources my-consult-source-projectile-projects 'append))
 
-    (use-package amx
-      :straight t
-  	:after smex)
-#+END_SRC
-** Avy
-#+BEGIN_SRC emacs-lisp
-(use-package avy
+(use-package consult-dir
   :straight t
-  :bind (("C-:" . avy-goto-char)
-         ("M-g 2" . avy-goto-char-2))
+  :bind (("C-x C-d" . consult-dir)
+         :map minibuffer-local-completion-map
+         ("C-x C-d" . consult-dir)
+         ("C-x C-j" . consult-dir-jump-file)))
+
+(use-package consult-recoll
+  :straight t
   :config
-  (global-set-key (kbd "C-c C-j") 'avy-resume))
-#+END_SRC
-** Counsel
-#+BEGIN_SRC emacs-lisp
-  (use-package rg
-     :straight t)
-
-   (use-package fzf
-     :straight t)
-
-   (use-package ag
-     :straight t)
-
-   (use-package counsel
-     :straight t
-     :bind (("C-x C-f" . counsel-find-file)
-            ("C-x b" . ivy-switch-buffer)
-            ("C-x B" . counsel-switch-buffer-other-window)
-            ("C-c C-r" . counsel-recentf)
-            ("C-x d" . counsel-dired)
-            ("M-s r" . counsel-rg)
-            ("C-c r" . counsel-rg)
-            ("C-c z" . counsel-fzf)
-            ("M-s z" . counsel-fzf)
-            ("C-c g" . counsel-git)
-            ("C-c a" . counsel-ag)
-            :map ivy-minibuffer-map ("C-r" . counsel-minibuffer-history))
-     :config
-     (global-set-key (kbd "M-x") 'counsel-M-x)
-     (global-set-key (kbd "C-x C-f") 'counsel-find-file)
-     (global-set-key (kbd "C-x l") 'counsel-locate)
-     (global-set-key (kbd "C-h f") 'counsel-describe-function)
-     (global-set-key (kbd "C-h v") 'counsel-describe-variable)
-     (global-set-key (kbd "C-h i") 'counsel-info-lookup-symbol)
-     (global-set-key (kbd "C-h u") 'counsel-unicode-char)
-     (global-set-key (kbd "C-h l") 'counsel-find-library)
-     (global-set-key (kbd "C-c j") 'counsel-git-grep)
-     (define-key minibuffer-local-map (kbd "C-r") 'counsel-minibuffer-history)
-     (add-to-list 'savehist-additional-variables 'counsel-compile-history)
-     (counsel-mode t)
-     (global-set-key (kbd "M-y") 'counsel-yank-pop))
+  (setq consult-recoll-search-flags nil)
+  :bind
+  ("M-s s" . consult-recoll))
 #+END_SRC
 ** Ivy
 #+BEGIN_SRC emacs-lisp
@@ -1596,10 +1685,51 @@ It's also nice to be able to use ~cdlatex~.
     ;; Use ivy-xref to display `xref.el' results.
     (setq xref-show-xrefs-function #'ivy-xref-show-xrefs))
   #+END_SRC
+** Counsel
+Lots of nice wrappers, so we will use them all.
+#+BEGIN_SRC emacs-lisp
+  (use-package rg
+     :straight t)
+
+   (use-package fzf
+     :straight t)
+
+   (use-package ag
+     :straight t)
+
+   (use-package counsel
+     :straight t
+     :bind (("C-x C-f" . counsel-find-file)
+            ("C-x b" . ivy-switch-buffer)
+            ("C-x B" . counsel-switch-buffer-other-window)
+            ("C-c C-r" . counsel-recentf)
+            ("C-x d" . counsel-dired)
+            ("M-s r" . counsel-rg)
+            ("C-c r" . counsel-rg)
+            ("C-c z" . counsel-fzf)
+            ("M-s z" . counsel-fzf)
+            ("C-c g" . counsel-git)
+            ("C-c a" . counsel-ag)
+            :map ivy-minibuffer-map ("C-r" . counsel-minibuffer-history))
+     :config
+     (global-set-key (kbd "M-x") 'counsel-M-x)
+     (global-set-key (kbd "C-x C-f") 'counsel-find-file)
+     (global-set-key (kbd "C-x l") 'counsel-locate)
+     (global-set-key (kbd "C-h f") 'counsel-describe-function)
+     (global-set-key (kbd "C-h v") 'counsel-describe-variable)
+     (global-set-key (kbd "C-h i") 'counsel-info-lookup-symbol)
+     (global-set-key (kbd "C-h u") 'counsel-unicode-char)
+     (global-set-key (kbd "C-h l") 'counsel-find-library)
+     (global-set-key (kbd "C-c j") 'counsel-git-grep)
+     (define-key minibuffer-local-map (kbd "C-r") 'counsel-minibuffer-history)
+     (add-to-list 'savehist-additional-variables 'counsel-compile-history)
+     (counsel-mode t)
+     (global-set-key (kbd "M-y") 'counsel-yank-pop))
+#+END_SRC
 ** Swiper
+A whole seatch /micro-framework/
 #+BEGIN_SRC emacs-lisp
   (use-package swiper
-      :straight t
       :bind (("C-s" . swiper-isearch)
          ("C-r" . swiper-isearch-backward)
          ("M-s s" . swiper)
@@ -1608,128 +1738,160 @@ It's also nice to be able to use ~cdlatex~.
       :config
       (global-set-key (kbd "C-s") 'swiper-isearch)
       (global-set-key (kbd "C-r") 'swiper-isearch-backward))
-  #+END_SRC
-* Consult, etc.
-#+BEGIN_SRC emacs-lisp
-   (use-package orderless
-     :straight t
-     :defer t
-     :custom
-     (completion-styles '(orderless basic))
-     (completion-category-overrides '((file (styles basic partial-completion)))))
-
-  (use-package consult
-   :straight t
-   :defer t
-   :after projectile
-   :config
-  (setq consult-project-root-function #'projectile-project-root)
-  (projectile-load-known-projects)
-  (setq my-consult-source-projectile-projects
-        `(:name "Projectile projects"
-          :narrow   ?P
-          :category project
-          :action   ,#'projectile-switch-project-by-name
-          :items    ,projectile-known-projects))
-  (add-to-list 'consult-buffer-sources my-consult-source-projectile-projects 'append))
-
-(use-package consult-dir
-  :straight t
-  :bind (("C-x C-d" . consult-dir)
-         :map minibuffer-local-completion-map
-         ("C-x C-d" . consult-dir)
-         ("C-x C-j" . consult-dir-jump-file)))
-
-(use-package consult-recoll
-  :straight t
-  :config
-  (setq consult-recoll-search-flags nil)
-  :bind
-  ("M-s s" . consult-recoll))
 #+END_SRC
+* prescient
+#+BEGIN_SRC emacs-lisp
+(use-package prescient
+  :config (prescient-persist-mode +1))
+
+(use-package ivy-prescient
+  :commands +ivy-prescient-non-fuzzy
+  :hook (ivy-mode . ivy-prescient-mode)
+  :hook (ivy-prescient-mode . prescient-persist-mode)
+  :config
+  (defun +ivy-prescient-non-fuzzy (str)
+    (let ((prescient-filter-method '(literal regexp)))
+      (ivy-prescient-re-builder str)))
+  (setq prescient-filter-method
+        '(literal regexp initialism fuzzy))
+  (add-to-list 'ivy-sort-functions-alist '(ivy-resume))
+  (setq ivy-prescient-sort-commands
+        '(:not swiper swiper-isearch ivy-switch-buffer lsp-ivy-workspace-symbol
+               ivy-resume ivy--restore-session counsel-grep counsel-git-grep
+               counsel-rg counsel-ag counsel-ack counsel-fzf counsel-pt counsel-imenu
+               counsel-yank-pop counsel-recentf counsel-buffer-or-recentf
+               counsel-outline counsel-org-goto counsel-jq)
+        ivy-prescient-retain-classic-highlighting t))
+
+;; prescient will be loaded on demand
+(use-package company-prescient
+  :hook (company-mode . company-prescient-mode)
+  :hook (company-prescient-mode . prescient-persist-mode))
+#+END_SRC
+* all-the-icons
+#+begin_src emacs-lisp :tangle yes
+(use-package all-the-icons
+  :demand t)
+
+(use-package all-the-icons-completion
+  :demand
+  :after (marginalia all-the-icons)
+  :hook (marginalia-mode . #'all-the-icons-completion-marginalia-setup)
+  :init
+  (all-the-icons-completion-mode))
+
+(use-package all-the-icons-ivy
+  :demand
+  :after ivy
+  :config
+  ;; (setq all-the-icons-ivy-buffer-commands nil)
+  (all-the-icons-ivy-setup))
+
+(use-package all-the-icons-ivy-rich
+  :demand
+  :after ivy-rich
+  :init (all-the-icons-ivy-rich-mode 1))
+
+(use-package all-the-icons-dired
+  :demand
+  :diminish t
+  :if (display-graphic-p)
+  :hook (dired-mode . (lambda () (interactive)
+                        (unless (file-remote-p default-directory)
+                          (all-the-icons-dired-mode))))
+  :custom
+  (all-the-icons-scale-factor 1.0))
+#+end_src
 * company-mode (global)
 For all /prog-modes/
 #+BEGIN_SRC emacs-lisp
-      (use-package company
-        :straight t
-        :commands (company-complete-common
-                 company-complete-common-or-cycle
-                 company-manual-begin
-                 company-grab-line)
-        :hook (prog-mode . company-mode)
-        :init
-        (global-company-mode)
-        :config
-        (setq company-dabbrev-other-buffers t
-              company-dabbrev-code-other-buffers t)
-        (setq company-minimum-prefix-length 2
-            company-show-numbers nil
-            company-tooltip-limit 14
-            company-tooltip-align-annotations t
-            company-require-match 'never)
-        (setq company-backends
+(use-package company
+  :demand
+  :commands (company-complete-common
+             company-complete-common-or-cycle
+             company-manual-begin
+             company-grab-line)
+  :hook (prog-mode . company-mode)
+  :hook (after-init . global-company-mode)
+  :config
+  (setq company-dabbrev-other-buffers t
+        company-dabbrev-code-other-buffers t)
+  (setq company-minimum-prefix-length 2
+        company-show-numbers nil
+        company-tooltip-limit 17
+        company-tooltip-align-annotations t
+        company-require-match 'never)
+  (setq company-global-modes
+        '(not message-mode
+              Man-mode
+              help-mode
+              Info-mode
+              gud-mode
+              vterm-mode))
+  (setq company-frontends
+        '(company-pseudo-tooltip-frontend  ; always show        candidates in overlay tooltip
+          company-echo-metadata-frontend))  ; show selected
+  (setq company-backends
         '((company-keywords
-           company-capf)
+           company-capf
+           company-gtags
+           company-etags
+           company-semantic
+           company-files)
           (company-abbrev company-dabbrev)
           )))
 
-      (use-package company-posframe
-        :straight t
-        :after company
-        :hook (company-mode . company-posframe-mode)
-        :config
-        (setq company-tooltip-minimum-width 40))
+(use-package company-posframe
+  :after company
+  :hook (company-mode . company-posframe-mode)
+  :config
+  (setq company-tooltip-minimum-width 40))
 
-      (use-package company-box
-        :straight t
-        :after company
-    ;;    :hook (company-mode . company-box-mode)
-        :config
-        (setq company-box-show-single-candidate t
-              company-box-backends-colors nil
-              company-box-max-candidates 6))
+(use-package company-box
+  :after company
+  ;;    :hook (company-mode . company-box-mode)
+  :config
+  (setq company-box-show-single-candidate t
+        company-box-backends-colors nil
+        company-box-max-candidates 6))
 
-      (use-package company-lsp
-        :straight t
-        :after company
-        :config
-        (push 'company-lsp company-backends))
+(use-package company-lsp
+  :straight t
+  :after company
+  :config
+  (push 'company-lsp company-backends))
 
-      (use-package company-quickhelp
-        :straight t
-        :after company
-        :custom
-        (company-quickhelp-delay 3)
-        :config
-        (company-quickhelp-mode t))
+(use-package company-quickhelp
+  :custom
+  :after company
+  (company-quickhelp-delay 3)
+  :hook (company-mode . company-quickhelp-mode))
 
-      (use-package company-math
-        :straight t
-        :after company
-        :config
-        (setq company-math-disallow-unicode-symbols-in-faces t)
-        ;;(add-to-list 'company-backends 'company-math-symbols-latex)
+(use-package company-math
+  :after company
+  :config
+  (setq company-math-disallow-unicode-symbols-in-faces t)
+  ;;(add-to-list 'company-backends 'company-math-symbols-latex)
         (append '((company-math-symbols-latex company-math-symbols-unicode))
                           company-backends))
 
-      (use-package company-org-block
-        :straight t
-        :after company
-        :custom
-        (company-org-block-edit-style 'auto) ;; 'auto, 'prompt, or 'inline
-        :hook (org-mode . (lambda ()
-                            (add-to-list 'company-backends 'company-org-block)
-                            (company-mode +1))))
+(use-package company-org-block
+  :after company
+  :custom
+  (company-org-block-edit-style 'auto) ;; 'auto, 'prompt, or 'inline
+  :hook (org-mode . (lambda ()
+                      (add-to-list 'company-backends 'company-org-block)
+                      (company-mode +1))))
 
-  (use-package company-statistics
-      :straight t
-      :after company
-      :init
-      (company-statistics-mode))
+(use-package company-statistics
+  :straight t
+  :after company
+  :init
+  (company-statistics-mode))
 
-  (use-package company-web
-      :straight t
-      :after company)
+(use-package company-web
+  :straight t
+  :after company)
 #+END_SRC
 * dired
 #+begin_src emacs-lisp :tangle yes
@@ -1879,26 +2041,6 @@ Some hacks to make ~company-mode~ work.
   (add-hook 'eshell-mode-hook
                 #'eshell-switch-company-frontend)
 #+end_src
-* Prescient
-#+BEGIN_SRC emacs-lisp
-  (use-package prescient
-    :straight t
-    :config (prescient-persist-mode +1))
-
-  (use-package ivy-prescient
-    :straight t
-    :hook (ivy-mode . ivy-prescient-mode)
-    :hook (ivy-prescient-mode . prescient-persist-mode)
-    :commands +ivy-prescient-non-fuzzy
-    :init
-    (setq prescient-filter-method
-                '(literal regexp initialism fuzzy))
-    :config (ivy-prescient-mode t))
-
-  (use-package company-prescient
-    :straight t
-    :init (company-prescient-mode +1))
-#+END_SRC
 * Markdown
 #+BEGIN_SRC emacs-lisp
   (use-package markdown-mode
@@ -2280,16 +2422,6 @@ Bloated crap, but has lots os support
       :defer t)
 #+end_src
 * Programming
-** Projectile
-#+begin_src emacs-lisp :tangle yes
-  (use-package projectile
-    :straight t
-    :defer t
-    :config
-    (setq projectile-require-project-root t)
-    (setq projectile-indexing-method 'alien)
-    (setq projectile-completion-system 'ivy))
-#+end_src
 ** rainbow-mode
 #+begin_src emacs-lisp :tangle yes
   (use-package rainbow-mode

@@ -1,13 +1,10 @@
-
-
 # The universal principles
 
 It is delightful to see all the *fundamental principles* at work in one place. A half of a non-bullshit Computer Science, so to speak.
 
 *Abstraction by parameterization* (lambdas and &ldquo;commands&rdquo;) *Data Abstraction (ADTs), standardized interfaces*, as well as *leaking abstractions* (`plist`, `alist`) and what the actual consequences are.
 
-GNU Emacs is a *very* large and *very* complex system, so *modularity*
-plays the central role here. Tens of packages (modules) are being used, so the obvious benefits and the obvious problems (breaking abstraction boundaries, relying on implementations, etc.) can be clearly seen.
+GNU Emacs is a *very* large and *very* complex system, so *modularity* plays the central role here. Tens of packages (modules) are being used, so the obvious benefits and the obvious problems (breaking abstraction boundaries, relying on implementations, etc.) can be clearly seen.
 
 At a higher level, the &ldquo;meta&rdquo; modularity of *DSLs* embedded in Emacs Lisp, which form distinct *layers* of related abstractions, is the result of another universal principle bein applied.
 
@@ -53,4 +50,3 @@ So, when one &ldquo;visits&rdquo; GNU emacs one has to experience some near &ldq
 More about this on <https://lngnmn2.github.io/articles/emacs/>
 
 Enough of an &ldquo;abstract theory&rdquo; (it isn&rsquo;t). Here comes the &ldquo;concrete&rdquo; code in which everything &ldquo;universal&rdquo; *manifests itself*.
-
