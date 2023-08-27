@@ -2681,14 +2681,50 @@ The ~xscheme-mode~ is already included into Emacs.
       (add-to-list 'company-backends 'company-mlton-grouped-backend))
 #+END_SRC
 ** Erlang
+TODO: put them all in one block
+Doom macros are cool.
 #+begin_src emacs-lisp :tangle yes
-  (use-package erlang
-    :straight t
-    :hook (erlang-mode . lsp)
-    :config
-    (setq erlang-root-dir "/usr/lib64/erlang")
-    (setq lsp-ui-doc-enable t))
+(defmacro file! ()
+  "Return the file of the file this macro was called."
+  (or
+   ;; REVIEW: Use `macroexp-file-name' once 27 support is dropped.
+   (let ((file (car (last current-load-list))))
+     (if (stringp file) file))
+   (bound-and-true-p byte-compile-current-file)
+   load-file-name
+   buffer-file-name   ; for `eval'
+   (error "file!: cannot deduce the current file path")))
 
+(defmacro dir! ()
+  "Return the directory of the file this macro was called."
+   (let (file-name-handler-alist)
+     (file-name-directory (macroexpand '(file!)))))
+
+(defmacro add-load-path! (&rest dirs)
+  "Add DIRS to `load-path', relative to the current file.
+The current file is the file from which `add-to-load-path!' is used."
+  `(let ((default-directory (dir!))
+         file-name-handler-alist)
+     (dolist (dir (list ,@dirs))
+       (cl-pushnew (expand-file-name dir) load-path :test #'string=))))
+
+(add-load-path! (car (file-expand-wildcards "/usr/lib64/erlang/lib/tools-*/emacs")))
+
+;; just right mode -- comint, etags, electric modes, flymake
+(use-package erlang
+  :straight '(:type built-in) ;; DO NOT clone whole otp
+  :load-path (lambda () (car (file-expand-wildcards "/usr/lib64/erlang/lib/tools-*/emacs")))
+  :hook (erlang-mode . flymake-mode)
+  :hook (erlang-mode . flycheck-mode)
+  :hook (erlang-mode . lsp)
+  :config
+  ;; prevent annoying hang-on-compile
+  (defvar inferior-erlang-prompt-timeout t)
+  ;; default node name to emacs@localhost
+  (setq inferior-erlang-machine-options '("-sname" "emacs"))
+  (setq erlang-root-dir "/usr/lib64/erlang")
+  (setq lsp-ui-doc-enable t)
+  (require 'erlang-start))
 #+end_src
 ** Ocaml
 #+BEGIN_SRC emacs-lisp
